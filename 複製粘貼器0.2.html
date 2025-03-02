@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>複製粘貼器</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            transition: background-color 0.3s, color 0.3s;
+            overflow-x: hidden;
+        }
+        .header {
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: inherit;
+        }
+        .title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .theme-btn {
+            background: none;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            padding: 5px;
+        }
+        .container {
+            padding: 0 15px 15px;
+        }
+        textarea {
+            width: 100%;
+            height: 120px;
+            border: none;
+            border-radius: 10px;
+            padding: 10px;
+            font-size: 14px;
+            resize: none;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+            margin-bottom: 10px;
+            outline: none;
+        }
+        .stats {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        body.dark .stats { color: #BBB; }
+        .button-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 8px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        #copyBtn { background: #007AFF; color: white; }
+        #pasteBtn { background: #5856D6; color: white; }
+        #saveBtn { background: #34C759; color: white; }
+        .tag-input {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 10px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+            outline: none;
+        }
+        .search-bar {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 10px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+            outline: none;
+        }
+        .saved-list {
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+        .saved-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+        }
+        .saved-text {
+            flex: 1;
+            font-size: 12px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 8px;
+            cursor: pointer;
+        }
+        .saved-btn, .delete-btn {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+        .saved-btn { background: #007AFF; color: white; }
+        .delete-btn { background: #FF3B30; color: white; }
+        .checkbox { margin-right: 5px; }
+        .tag {
+            background: #D1D1D6;
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-size: 10px;
+            margin-right: 5px;
+            cursor: pointer;
+        }
+        body.dark .tag { background: #4A4A50; color: #FFFFFF; }
+        .bulk-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .bulk-actions button { width: auto; padding: 8px 12px; }
+        .sort-btn { background: #FF9500; color: white; }
+        .notification {
+            position: fixed;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #34C759;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        /* 淺色主題 */
+        body.light { background: #F5F5F5; color: #000; }
+        body.light .header { background: #F5F5F5; }
+        body.light textarea, body.light .saved-item, body.light .search-bar, body.light .tag-input {
+            background: #FFFFFF;
+        }
+        /* 深色主題 */
+        body.dark { background: #212121; color: #FFFFFF; }
+        body.dark .header { background: #212121; }
+        body.dark textarea, body.dark .saved-item, body.dark .search-bar, body.dark .tag-input {
+            background: #2D2D2D;
+            color: #FFFFFF;
+        }
+    </style>
+</head>
+<body class="light">
+    <div class="header">
+        <div class="title">複製粘貼器</div>
+        <button class="theme-btn" onclick="toggleTheme()"><i class="fas fa-moon"></i></button>
+    </div>
+    <div class="container">
+        <textarea id="textArea" placeholder="輸入內容..." oninput="updateStats()"></textarea>
+        <div class="stats" id="stats">字數: 0 / 字符: 0</div>
+        <div class="button-group">
+            <button id="copyBtn" onclick="copyText()" title="複製"><i class="fas fa-copy"></i></button>
+            <button id="pasteBtn" onclick="pasteText()" title="粘貼"><i class="fas fa-paste"></i></button>
+            <button id="saveBtn" onclick="saveText()" title="儲存"><i class="fas fa-save"></i></button>
+        </div>
+        <input type="text" id="tagInput" class="tag-input" placeholder="標籤（可選）">
+        <input type="text" id="searchBar" class="search-bar" placeholder="搜尋..." oninput="searchItems()">
+        <div class="bulk-actions">
+            <button onclick="deleteSelected()" style="background: #FF3B30; color: white;"><i class="fas fa-trash"></i> 刪除</button>
+            <button onclick="exportItems()" style="background: #5856D6; color: white;"><i class="fas fa-download"></i> 匯出</button>
+            <input type="file" id="importFile" accept=".json" onchange="importItems()" style="display: none;">
+            <button onclick="document.getElementById('importFile').click()" style="background: #34C759; color: white;"><i class="fas fa-upload"></i> 匯入</button>
+            <button class="sort-btn" onclick="sortItems()" title="排序"><i class="fas fa-sort"></i></button>
+            <button onclick="copyAll()" style="background: #007AFF; color: white;" title="全選複製"><i class="fas fa-copy"></i> 全</button>
+        </div>
+        <div class="saved-list" id="savedList"></div>
+    </div>
+    <div id="notification" class="notification"></div>
+
+    <script>
+        let savedItems = [];
+        let settings = { theme: 'light', currentText: '' };
+        let sortMode = 'time';
+
+        function initializeData() {
+            const storedItems = localStorage.getItem('savedItems');
+            const storedSettings = localStorage.getItem('settings');
+            try {
+                savedItems = storedItems ? JSON.parse(storedItems) : [];
+                settings = storedSettings ? JSON.parse(storedSettings) : { theme: 'light', currentText: '' };
+            } catch (e) {
+                console.error('數據解析失敗，重置為預設值', e);
+                savedItems = [];
+                settings = { theme: 'light', currentText: '' };
+                localStorage.setItem('savedItems', JSON.stringify(savedItems));
+                localStorage.setItem('settings', JSON.stringify(settings));
+            }
+            if (!Array.isArray(savedItems)) savedItems = [];
+            savedItems = savedItems.map(item => 
+                typeof item === 'string' ? { text: item, tag: '無標籤', timestamp: Date.now() } : item
+            );
+        }
+
+        function copyText() {
+            const textArea = document.getElementById('textArea');
+            textArea.select();
+            navigator.clipboard.writeText(textArea.value);
+            showNotification('已複製');
+            saveSettings();
+        }
+
+        async function pasteText() {
+            const text = await navigator.clipboard.readText();
+            document.getElementById('textArea').value = text;
+            updateStats();
+            saveSettings();
+        }
+
+        function saveText() {
+            const text = document.getElementById('textArea').value.trim();
+            let tag = document.getElementById('tagInput').value.trim();
+            if (text) {
+                if (!tag) tag = suggestTag(text);
+                if (!Array.isArray(savedItems)) savedItems = [];
+                savedItems.unshift({ text, tag, timestamp: Date.now() });
+                cleanOldItems();
+                localStorage.setItem('savedItems', JSON.stringify(savedItems));
+                navigator.clipboard.writeText(text);
+                showNotification('已儲存並複製');
+                renderSavedItems();
+                document.getElementById('textArea').value = '';
+                document.getElementById('tagInput').value = '';
+                saveSettings();
+            }
+        }
+
+        function suggestTag(text) {
+            if (text.includes('http')) return '連結';
+            if (text.length > 50) return '長文';
+            if (/^\d+$/.test(text)) return '數字';
+            return '文字';
+        }
+
+        function cleanOldItems() {
+            const now = Date.now();
+            const expiry = 7 * 24 * 60 * 60 * 1000; // 7天過期
+            savedItems = savedItems.filter(item => (now - (item.timestamp || 0)) < expiry);
+        }
+
+        function deleteItem(index) {
+            savedItems.splice(index, 1);
+            localStorage.setItem('savedItems', JSON.stringify(savedItems));
+            renderSavedItems();
+        }
+
+        function renderSavedItems(filter = '') {
+            const list = document.getElementById('savedList');
+            list.innerHTML = '';
+            let filteredItems = savedItems.filter(item => {
+                if (typeof item === 'string') return item.toLowerCase().includes(filter.toLowerCase());
+                return (item.text?.toLowerCase().includes(filter.toLowerCase()) || 
+                        item.tag?.toLowerCase().includes(filter.toLowerCase()));
+            });
+            if (sortMode === 'tag') filteredItems.sort((a, b) => a.tag.localeCompare(b.tag));
+            else if (sortMode === 'length') filteredItems.sort((a, b) => b.text.length - a.text.length);
+            filteredItems.forEach((item, index) => {
+                const text = typeof item === 'string' ? item : item.text;
+                const tag = typeof item === 'string' ? '無標籤' : item.tag;
+                const div = document.createElement('div');
+                div.className = 'saved-item';
+                div.innerHTML = `
+                    <input type="checkbox" class="checkbox" data-index="${index}">
+                    <span class="saved-text" onclick="pasteSaved(${index})">${text}</span>
+                    <span class="tag" onclick="filterByTag('${tag}')">${tag}</span>
+                    <button class="saved-btn" onclick="copySaved(${index})"><i class="fas fa-copy"></i></button>
+                    <button class="delete-btn" onclick="deleteItem(${index})"><i class="fas fa-trash"></i></button>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function copySaved(index) {
+            const text = typeof savedItems[index] === 'string' ? savedItems[index] : savedItems[index].text;
+            navigator.clipboard.writeText(text);
+            showNotification('已複製');
+        }
+
+        function pasteSaved(index) {
+            const text = typeof savedItems[index] === 'string' ? savedItems[index] : savedItems[index].text;
+            document.getElementById('textArea').value = text;
+            updateStats();
+            saveSettings();
+        }
+
+        function searchItems() {
+            const searchTerm = document.getElementById('searchBar').value;
+            renderSavedItems(searchTerm);
+        }
+
+        function filterByTag(tag) {
+            document.getElementById('searchBar').value = tag;
+            renderSavedItems(tag);
+        }
+
+        function deleteSelected() {
+            const checkboxes = document.querySelectorAll('.checkbox:checked');
+            const indices = Array.from(checkboxes).map(cb => parseInt(cb.dataset.index)).sort((a, b) => b - a);
+            indices.forEach(index => savedItems.splice(index, 1));
+            localStorage.setItem('savedItems', JSON.stringify(savedItems));
+            renderSavedItems();
+        }
+
+        function sortItems() {
+            sortMode = sortMode === 'time' ? 'tag' : sortMode === 'tag' ? 'length' : 'time';
+            showNotification(`排序: ${sortMode === 'time' ? '時間' : sortMode === 'tag' ? '標籤' : '長度'}`);
+            renderSavedItems(document.getElementById('searchBar').value);
+        }
+
+        function copyAll() {
+            const allText = savedItems.map(item => typeof item === 'string' ? item : item.text).join('\n');
+            navigator.clipboard.writeText(allText);
+            showNotification('已複製所有項目');
+        }
+
+        function updateStats() {
+            const text = document.getElementById('textArea').value;
+            const words = text.split(/\s+/).filter(w => w.length > 0).length;
+            const chars = text.length;
+            document.getElementById('stats').textContent = `字數: ${words} / 字符: ${chars}`;
+        }
+
+        function exportItems() {
+            const dataStr = JSON.stringify(savedItems);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'clipboard_items.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importItems() {
+            const file = document.getElementById('importFile').files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        savedItems = JSON.parse(e.target.result);
+                        if (!Array.isArray(savedItems)) savedItems = [];
+                        savedItems = savedItems.map(item => 
+                            typeof item === 'string' ? { text: item, tag: '無標籤', timestamp: Date.now() } : item
+                        );
+                        localStorage.setItem('savedItems', JSON.stringify(savedItems));
+                        renderSavedItems();
+                    } catch (e) {
+                        showNotification('匯入失敗，數據格式錯誤');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.opacity = '1';
+            setTimeout(() => notification.style.opacity = '0', 1500);
+        }
+
+        function toggleTheme() {
+            const body = document.body;
+            const btn = document.querySelector('.theme-btn');
+            if (body.classList.contains('light')) {
+                body.classList.remove('light');
+                body.classList.add('dark');
+                btn.innerHTML = '<i class="fas fa-sun"></i>';
+                settings.theme = 'dark';
+            } else {
+                body.classList.remove('dark');
+                body.classList.add('light');
+                btn.innerHTML = '<i class="fas fa-moon"></i>';
+                settings.theme = 'light';
+            }
+            saveSettings();
+        }
+
+        function saveSettings() {
+            settings.currentText = document.getElementById('textArea').value;
+            localStorage.setItem('settings', JSON.stringify(settings));
+        }
+
+        function loadSettings() {
+            const body = document.body;
+            const btn = document.querySelector('.theme-btn');
+            initializeData();
+            cleanOldItems();
+            localStorage.setItem('savedItems', JSON.stringify(savedItems));
+            if (settings.theme === 'dark') {
+                body.classList.remove('light');
+                body.classList.add('dark');
+                btn.innerHTML = '<i class="fas fa-sun"></i>';
+            } else {
+                body.classList.remove('dark');
+                body.classList.add('light');
+                btn.innerHTML = '<i class="fas fa-moon"></i>';
+            }
+            document.getElementById('textArea').value = settings.currentText || '';
+            updateStats();
+        }
+
+        // 初始化
+        loadSettings();
+        renderSavedItems();
+    </script>
+</body>
+</html>
